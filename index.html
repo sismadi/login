@@ -1,4 +1,100 @@
-<script>
+
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>myapp · Login GitHub (SPA + PKCE)</title>
+  <style>
+    :root { --bg:#0b1220; --panel:#111a2f; --text:#e7efff; --muted:#9bb0d0; --accent:#61dafb; --ok:#3fb950; --warn:#f2cc60; --err:#ff6b6b; }
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+    .wrap{max-width:960px;margin:20px auto;padding:0 16px}
+    .card{background:var(--panel);border:1px solid #1b2b48;border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+    .row{display:flex;gap:16px;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #1b2b48}
+    .row:last-child{border-bottom:0}
+    .btn{appearance:none;border:1px solid #2a3f66;background:#1a2947;color:var(--text);padding:10px 14px;border-radius:10px;cursor:pointer}
+    .btn:hover{filter:brightness(1.1)}
+    .btn.primary{background:#17375e;border-color:#2a4d7f}
+    .btn.danger{background:#4a2230;border-color:#6a2f44}
+    code,kbd{background:#0d1a30;border:1px solid #1b2b48;border-radius:6px;padding:2px 6px}
+    .muted{color:var(--muted)}
+    .grid{display:grid;grid-template-columns:1fr;gap:12px;padding:16px}
+    @media(min-width:720px){.grid{grid-template-columns:1fr 1fr}}
+    .mono{font-family:ui-monospace,SFMono-Regular,Consolas,Menlo,monospace}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#0d1a30;border:1px solid #1b2b48}
+    .warn{color:var(--warn)} .ok{color:var(--ok)} .err{color:var(--err)}
+    .avatar{width:56px;height:56px;border-radius:50%;border:1px solid #1b2b48}
+    .list{padding:8px 16px}
+    .repo{padding:10px 0;border-bottom:1px dashed #29405f}
+    .sr{position:absolute;left:-9999px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1 style="margin:8px 0 16px">myapp <span class="muted">· Login GitHub (SPA + PKCE)</span></h1>
+
+    <div class="card">
+      <div class="row">
+        <div>
+          <div><strong>Status:</strong> <span id="status" class="pill muted">belum login</span></div>
+          <div class="muted" style="margin-top:4px">SPA OAuth2 Authorization Code + PKCE</div>
+        </div>
+        <div id="actions">
+          <button id="loginBtn" class="btn primary">Login dengan GitHub</button>
+        </div>
+      </div>
+
+      <div class="row" id="whoami" hidden>
+        <div style="display:flex;gap:12px;align-items:center">
+          <img id="avatar" class="avatar" alt="avatar" src="">
+          <div>
+            <div id="name" style="font-weight:700"></div>
+            <div id="login" class="muted"></div>
+          </div>
+        </div>
+        <div>
+          <button id="logoutBtn" class="btn danger">Logout</button>
+        </div>
+      </div>
+
+      <div class="grid" id="content">
+        <div class="card" style="border:none">
+          <div class="row"><strong>Token (ringkas)</strong></div>
+          <div class="list mono" id="tokenBox"><span class="muted">–</span></div>
+        </div>
+        <div class="card" style="border:none">
+          <div class="row"><strong>Repositori Publik</strong> <span class="muted">· contoh panggil API</span></div>
+          <div class="list" id="repos"><span class="muted">–</span></div>
+        </div>
+      </div>
+    </div>
+
+    <p class="muted" style="margin:18px 4px">
+      Tip: Untuk pengujian lokal, Anda bisa set <code>REDIRECT_URI</code> jadi <code>http://localhost:8080/</code> lalu jalankan server kecil.  
+      Di GitHub OAuth App, pastikan Redirect URI sama persis.
+    </p>
+    <details class="card" style="margin-top:12px">
+      <summary class="row"><strong>Konfigurasi</strong> <span class="muted">· cara men-setup OAuth App & catatan CORS</span></summary>
+      <div class="grid">
+        <div>
+          <ol>
+            <li>Buat <em>OAuth App</em> di <kbd>Settings → Developer settings → OAuth Apps</kbd>.</li>
+            <li><strong>Homepage URL</strong>: sesuai domain/app Anda.</li>
+            <li><strong>Authorization callback URL</strong> (Redirect URI): sama dengan <code>REDIRECT_URI</code> di bawah.</li>
+            <li>Salin <strong>Client ID</strong>, masukkan ke variabel di skrip.</li>
+            <li>SPA ini pakai <b>PKCE</b> (tanpa client secret).</li>
+          </ol>
+        </div>
+        <div>
+          <p><b>Catatan CORS:</b> Di sebagian environment, call ke
+          <code>https://github.com/login/oauth/access_token</code> bisa diblokir CORS.
+          Jika begitu, gunakan <em>fallback</em> Worker (contoh di bawah) untuk menukar <code>code</code> → <code>access_token</code>.</p>
+        </div>
+      </div>
+    </details>
+  </div>
+
+ <script>
   // ==== KONFIGURASI ====
   const CLIENT_ID = "Ov23lis3fqdO2Kv7zyvI";
   const REDIRECT_URI = "https://sismadi.github.io/login/"; // contoh: "https://sismadi.github.io/login/"
@@ -52,3 +148,10 @@
 
   // ... (fungsi lain tidak berubah, hanya exchangeCodeForToken yang dipaksa via proxy)
 </script>
+</body>
+</html>
+
+
+
+
+
