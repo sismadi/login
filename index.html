@@ -149,11 +149,13 @@
     }
     const payload = {
       client_id: CLIENT_ID,
-      grant_type: "authorization_code",
       code,
       redirect_uri: REDIRECT_URI,
       code_verifier: verifier
     };
+
+
+    
     const res = await fetch(TOKEN_PROXY, {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
