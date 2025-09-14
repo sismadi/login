@@ -93,11 +93,113 @@
     </details>
   </div>
 
+  <input id="fileInput" type="file" hidden />
+<button class="btn" id="pickBtn">Pilih file</button>
+<button class="btn primary" id="uploadBtn">Upload ke Repo</button>
+<div class="muted" id="uploadStatus"></div>
+<script>
+  const $ = (id)=>document.getElementById(id);
+
+  // Encode teks (UTF-8) → base64 (untuk file teks kecil)
+  function b64FromText(str) {
+    return btoa(unescape(encodeURIComponent(str)));
+  }
+
+  // Encode File/Binary → base64 (umum)
+  function b64FromFile(file) {
+    return new Promise((resolve,reject)=>{
+      const fr = new FileReader();
+      fr.onload = () => {
+        const bytes = new Uint8Array(fr.result);
+        let bin = "";
+        for (let i=0;i<bytes.length;i++) bin += String.fromCharCode(bytes[i]);
+        resolve(btoa(bin));
+      };
+      fr.onerror = reject;
+      fr.readAsArrayBuffer(file);
+    });
+  }
+
+  async function getExistingSha({owner, repo, path, branch, token}) {
+    const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(branch)}`;
+    const res = await fetch(url, {
+      headers: { "Authorization": "Bearer "+token, "Accept":"application/vnd.github+json" }
+    });
+    if (res.status === 404) return null;      // belum ada
+    if (!res.ok) throw new Error("Gagal cek file: "+res.status);
+    const json = await res.json();
+    return json.sha || null;
+  }
+
+  async function uploadToRepo({owner, repo, path, contentBase64, message, branch="main"}) {
+    const token = sessionStorage.getItem("gh_token");
+    if (!token) throw new Error("Belum login.");
+
+    // Cek apakah file sudah ada → perlu sha saat update
+    const sha = await getExistingSha({owner, repo, path, branch, token}).catch(()=>null);
+
+    const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}`;
+    const body = {
+      message: message || `upload via myapp: ${path}`,
+      content: contentBase64,
+      branch,
+      ...(sha ? { sha } : {})
+    };
+
+    const res = await fetch(url, {
+      method: "PUT",
+      headers: {
+        "Authorization": "Bearer "+token,
+        "Accept": "application/vnd.github+json",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    });
+
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.message || ("HTTP "+res.status));
+    return json; // berisi commit, content.html_url, dsb.
+  }
+
+  // Contoh wiring UI
+  $("pickBtn").onclick = ()=> $("fileInput").click();
+
+  $("uploadBtn").onclick = async () => {
+    try {
+      $("uploadStatus").textContent = "Mengunggah…";
+
+      // ==== KONFIGURASI TUJUAN ====
+      const owner = "sismadi";          // ganti sesuai target
+      const repo  = "nama-repo";        // ganti
+      const path  = "folder/namafile.txt"; // ganti
+      const branch = "main";            // ganti bila perlu
+      const message = "feat: upload via myapp";
+
+      // ==== AMBIL SUMBER FILE ====
+      const file = $("fileInput").files[0];
+      if (!file) throw new Error("Pilih file dulu.");
+
+      // Base64 isi file:
+      const contentBase64 = await b64FromFile(file);
+
+      // Unggah:
+      const result = await uploadToRepo({owner, repo, path, contentBase64, message, branch});
+      const url = result?.content?.html_url || result?.commit?.html_url || "";
+      $("uploadStatus").innerHTML = `Sukses ✅ <a target="_blank" href="${url}">Lihat di GitHub</a>`;
+    } catch (e) {
+      console.error(e);
+      $("uploadStatus").textContent = "Gagal ❌ " + e.message;
+    }
+  };
+</script>
+
+  
   <script>
   // ==== KONFIGURASI ====
   const CLIENT_ID = "Ov23li1EFh24K8EdVIjR";
   const REDIRECT_URI = "https://sismadi.github.io/login/"; // contoh: window.location.origin + "/"
-  const SCOPES = ["read:user", "user:email"]; // tambah scope sesuai kebutuhan
+  const SCOPES = ["read:user", "user:email","repo"]; // tambah scope sesuai kebutuhan
+ 
   // Jika perlu fallback proxy (Cloudflare Worker, dst), isi di sini:
   const TOKEN_PROXY = "https://myapp.wawan.workers.dev/token"; // contoh: "https://my-worker.example.workers.dev/token"
 
