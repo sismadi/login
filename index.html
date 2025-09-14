@@ -170,21 +170,16 @@
       throw new Error("State/verifier tidak cocok. Ulangi login.");
     }
 
--   // Opsi A: langsung ke GitHub (butuh CORS diizinkan)
--   const payload = { client_id: CLIENT_ID, grant_type:"authorization_code", code, redirect_uri: REDIRECT_URI, code_verifier: verifier };
--   async function tryDirect() { ... }
--   async function viaProxy() { ... }
--   try { return await tryDirect(); } catch(e) { return await viaProxy(); }
 
-+   // Selalu via proxy (secret ditambahkan di Worker)
-+   const payload = { code, redirect_uri: REDIRECT_URI, code_verifier: verifier };
-+   const res = await fetch(TOKEN_PROXY, {
-+     method: "POST",
-+     headers: { "Content-Type": "application/json" },
-+     body: JSON.stringify(payload)
-+   });
-+   if (!res.ok) throw new Error("Proxy error: " + res.status);
-+   return await res.json();
+   // Selalu via proxy (secret ditambahkan di Worker)
+   const payload = { code, redirect_uri: REDIRECT_URI, code_verifier: verifier };
+   const res = await fetch(TOKEN_PROXY, {
+     method: "POST",
+     headers: { "Content-Type": "application/json" },
+     body: JSON.stringify(payload)
+   });
+   if (!res.ok) throw new Error("Proxy error: " + res.status);
+   return await res.json();
   }
 
     
