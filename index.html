@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html lang="id">
 <head>
@@ -26,7 +25,6 @@
     .avatar{width:56px;height:56px;border-radius:50%;border:1px solid #1b2b48}
     .list{padding:8px 16px}
     .repo{padding:10px 0;border-bottom:1px dashed #29405f}
-    .sr{position:absolute;left:-9999px}
   </style>
 </head>
 <body>
@@ -70,44 +68,35 @@
     </div>
 
     <p class="muted" style="margin:18px 4px">
-      Tip: Untuk pengujian lokal, Anda bisa set <code>REDIRECT_URI</code> jadi <code>http://localhost:8080/</code> lalu jalankan server kecil.  
-      Di GitHub OAuth App, pastikan Redirect URI sama persis.
+      Tip: Untuk dev lokal, set <code>REDIRECT_URI</code> ke <code>http://localhost:8080/</code> dan samakan di OAuth App.
     </p>
     <details class="card" style="margin-top:12px">
-      <summary class="row"><strong>Konfigurasi</strong> <span class="muted">· cara men-setup OAuth App & catatan CORS</span></summary>
+      <summary class="row"><strong>Konfigurasi</strong> <span class="muted">· catatan CORS</span></summary>
       <div class="grid">
         <div>
           <ol>
             <li>Buat <em>OAuth App</em> di <kbd>Settings → Developer settings → OAuth Apps</kbd>.</li>
-            <li><strong>Homepage URL</strong>: sesuai domain/app Anda.</li>
-            <li><strong>Authorization callback URL</strong> (Redirect URI): sama dengan <code>REDIRECT_URI</code> di bawah.</li>
-            <li>Salin <strong>Client ID</strong>, masukkan ke variabel di skrip.</li>
+            <li><strong>Authorization callback URL</strong> = persis <code>REDIRECT_URI</code>.</li>
             <li>SPA ini pakai <b>PKCE</b> (tanpa client secret).</li>
           </ol>
         </div>
         <div>
-          <p><b>Catatan CORS:</b> Di sebagian environment, call ke
-          <code>https://github.com/login/oauth/access_token</code> bisa diblokir CORS.
-          Jika begitu, gunakan <em>fallback</em> Worker (contoh di bawah) untuk menukar <code>code</code> → <code>access_token</code>.</p>
+          <p><b>CORS:</b> Penukaran token wajib via proxy (Cloudflare Worker/Backend) karena endpoint GitHub tidak beri CORS.</p>
         </div>
       </div>
     </details>
   </div>
 
- <script>
+  <script>
   // ==== KONFIGURASI ====
-  const CLIENT_ID = "Ov23lis3fqdO2Kv7zyvI";
-  const REDIRECT_URI = "https://sismadi.github.io/login/"; // contoh: "https://sismadi.github.io/login/"
+  const CLIENT_ID = "Ov23lis3fqdO2Kv7zyvI";                           // ganti milik Anda
+  const REDIRECT_URI = "https://sismadi.github.io/login/";            // pastikan sama di OAuth App
   const SCOPES = ["read:user", "user:email"];
-
-  // Gunakan proxy worker Anda di sini:
-  const TOKEN_PROXY = "https://myapp.wawan.workers.dev/token";
+  const TOKEN_PROXY = "https://myapp.wawan.workers.dev/token";        // Cloudflare Worker Anda
 
   // ==== UTIL ====
-  const b64url = (buf) => {
-    return btoa(String.fromCharCode(...new Uint8Array(buf)))
-      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
-  };
+  const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)))
+    .replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
   const sha256 = async (str) => {
     const data = new TextEncoder().encode(str);
     return await crypto.subtle.digest("SHA-256", data);
@@ -118,15 +107,46 @@
     return Array.from(arr).map(b=>("0"+b.toString(16)).slice(-2)).join("");
   };
 
-  // ... (fungsi UI & helper tetap sama)
+  // ==== UI REFS ====
+  const ui = {
+    status: document.getElementById("status"),
+    actions: document.getElementById("actions"),
+    whoami: document.getElementById("whoami"),
+    avatar: document.getElementById("avatar"),
+    name: document.getElementById("name"),
+    login: document.getElementById("login"),
+    tokenBox: document.getElementById("tokenBox"),
+    repos: document.getElementById("repos"),
+  };
 
-  async function exchangeCodeForToken(code, stateFromUrl) {
+  function setStatus(text, cls="muted"){ ui.status.textContent=text; ui.status.className="pill "+cls; }
+  function abbreviateToken(tok){ return tok ? tok.slice(0,10)+"…"+tok.slice(-6) : "–"; }
+
+  // ==== AUTH FLOW ====
+  async function beginLogin(){
+    const state = randStr(24);
+    const code_verifier = randStr(64);
+    const code_challenge = b64url(await sha256(code_verifier));
+    sessionStorage.setItem("gh_state", state);
+    sessionStorage.setItem("gh_verifier", code_verifier);
+
+    const url = new URL("https://github.com/login/oauth/authorize");
+    url.searchParams.set("client_id", CLIENT_ID);
+    url.searchParams.set("redirect_uri", REDIRECT_URI);
+    url.searchParams.set("scope", SCOPES.join(" "));
+    url.searchParams.set("state", state);
+    url.searchParams.set("allow_signup", "true");
+    url.searchParams.set("code_challenge", code_challenge);
+    url.searchParams.set("code_challenge_method", "S256");
+    window.location = url.toString();
+  }
+
+  async function exchangeCodeForToken(code, stateFromUrl){
     const state = sessionStorage.getItem("gh_state");
     const verifier = sessionStorage.getItem("gh_verifier");
     if (!state || !verifier || state !== stateFromUrl) {
       throw new Error("State/verifier tidak cocok. Ulangi login.");
     }
-
     const payload = {
       client_id: CLIENT_ID,
       grant_type: "authorization_code",
@@ -134,24 +154,98 @@
       redirect_uri: REDIRECT_URI,
       code_verifier: verifier
     };
-
-    // 🚀 Langsung pakai proxy
     const res = await fetch(TOKEN_PROXY, {
-      method: "POST",
-      headers: { "Content-Type":"application/json" },
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
       body: JSON.stringify(payload)
     });
-    if (!res.ok) throw new Error("Proxy error: "+res.status);
-
+    if(!res.ok) throw new Error("Proxy error: "+res.status);
     return await res.json();
   }
 
-  // ... (fungsi lain tidak berubah, hanya exchangeCodeForToken yang dipaksa via proxy)
-</script>
+  function storeToken(t){ sessionStorage.setItem("gh_token", t); }
+  function getToken(){ return sessionStorage.getItem("gh_token"); }
+  function clearAuth(){
+    sessionStorage.removeItem("gh_token");
+    sessionStorage.removeItem("gh_state");
+    sessionStorage.removeItem("gh_verifier");
+  }
+
+  function logout(){
+    clearAuth();
+    history.replaceState({}, "", new URL(REDIRECT_URI).pathname);
+    renderSignedOut();
+  }
+
+  async function fetchJSON(url, token){
+    const res = await fetch(url, { headers: { "Authorization":"Bearer "+token, "Accept":"application/vnd.github+json" }});
+    if(!res.ok) throw new Error("HTTP "+res.status+" – "+url);
+    return await res.json();
+  }
+
+  async function loadProfileAndRepos(token){
+    setStatus("memuat profil…","muted");
+    const me = await fetchJSON("https://api.github.com/user", token);
+    ui.avatar.src = me.avatar_url;
+    ui.name.textContent = me.name || "(tanpa nama)";
+    ui.login.textContent = "@"+me.login;
+    ui.tokenBox.textContent = abbreviateToken(token);
+    setStatus("login","ok");
+
+    const repos = await fetchJSON("https://api.github.com/user/repos?sort=updated&per_page=10", token);
+    ui.repos.innerHTML = repos.length
+      ? repos.map(r=>`<div class="repo"><a target="_blank" href="${r.html_url}">${r.full_name}</a><div class="muted">${r.description??""}</div></div>`).join("")
+      : '<span class="muted">Tidak ada repositori</span>';
+
+    ui.whoami.hidden = false;
+    ui.actions.innerHTML = `<button id="logoutBtn" class="btn danger">Logout</button>`;
+    document.getElementById("logoutBtn").onclick = logout;
+  }
+
+  function renderSignedOut(){
+    setStatus("belum login","muted");
+    ui.whoami.hidden = true;
+    ui.tokenBox.innerHTML = '<span class="muted">–</span>';
+    ui.repos.innerHTML = '<span class="muted">–</span>';
+    ui.actions.innerHTML = `<button id="loginBtn" class="btn primary">Login dengan GitHub</button>`;
+    document.getElementById("loginBtn").onclick = beginLogin;
+  }
+
+  // ==== INIT ====
+  (async function init(){
+    // pasang handler awal (untuk pertama kali render)
+    const btn = document.getElementById("loginBtn");
+    if (btn) btn.onclick = beginLogin;
+
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    const state = params.get("state");
+
+    const existing = getToken();
+    if (existing) {
+      history.replaceState({}, "", new URL(REDIRECT_URI).pathname);
+      try { await loadProfileAndRepos(existing); }
+      catch(e){ console.error(e); logout(); }
+      return;
+    }
+
+    if (code && state) {
+      try {
+        setStatus("menukar code → token…","muted");
+        const tok = await exchangeCodeForToken(code, state);
+        if (!tok || !tok.access_token) throw new Error("Token tidak ditemukan di respons");
+        storeToken(tok.access_token);
+        history.replaceState({}, "", new URL(REDIRECT_URI).pathname);
+        await loadProfileAndRepos(tok.access_token);
+      } catch (e) {
+        console.error(e);
+        alert("Login gagal: "+e.message);
+        renderSignedOut();
+      }
+    } else {
+      renderSignedOut();
+    }
+  })();
+  </script>
 </body>
 </html>
-
-
-
-
-
