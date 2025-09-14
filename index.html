@@ -141,29 +141,48 @@
     window.location = url.toString();
   }
 
-  async function exchangeCodeForToken(code, stateFromUrl){
-    const state = sessionStorage.getItem("gh_state");
-    const verifier = sessionStorage.getItem("gh_verifier");
-    if (!state || !verifier || state !== stateFromUrl) {
-      throw new Error("State/verifier tidak cocok. Ulangi login.");
-    }
-    const payload = {
-      client_id: CLIENT_ID,
-      code,
-      redirect_uri: REDIRECT_URI,
-      code_verifier: verifier
-    };
+
+
+    async function exchangeCodeForToken(code, stateFromUrl){
+  const state = sessionStorage.getItem("gh_state");
+  const verifier = sessionStorage.getItem("gh_verifier");
+
+  // ⛑️ Perbaikan: log & auto-recover ketika mismatch/hilang
+  if (!state || !verifier || state !== stateFromUrl) {
+    console.warn("STATE URL:", stateFromUrl, "STATE STORE:", state, "VERIFIER:", !!verifier);
+    // bersihkan & kembali ke kondisi awal
+    sessionStorage.removeItem("gh_state");
+    sessionStorage.removeItem("gh_verifier");
+    sessionStorage.removeItem("gh_token");
+    history.replaceState({}, "", new URL(REDIRECT_URI).pathname);
+    throw new Error("State/verifier tidak cocok. Ulangi login.");
+  }
+
+  const payload = {
+    client_id: CLIENT_ID,
+    code,
+    redirect_uri: REDIRECT_URI,
+    code_verifier: verifier
+  };
+
+  const res = await fetch(TOKEN_PROXY, {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify(payload)
+  });
+  if(!res.ok) throw new Error("Proxy error: "+res.status);
+  return await res.json();
+}
 
 
     
-    const res = await fetch(TOKEN_PROXY, {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify(payload)
-    });
-    if(!res.ok) throw new Error("Proxy error: "+res.status);
-    return await res.json();
-  }
+function disableActions(msg="memproses…"){
+  ui.actions.innerHTML = `<button class="btn" disabled>${msg}</button>`;
+}
+function enableLogin(){
+  ui.actions.innerHTML = `<button id="loginBtn" class="btn primary">Login dengan GitHub</button>`;
+  document.getElementById("loginBtn").onclick = beginLogin;
+}
 
   function storeToken(t){ sessionStorage.setItem("gh_token", t); }
   function getToken(){ return sessionStorage.getItem("gh_token"); }
