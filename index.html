@@ -161,50 +161,33 @@
     window.location = url.toString();
   }
 
-  async function exchangeCodeForToken(code, stateFromUrl) {
+
+
+      async function exchangeCodeForToken(code, stateFromUrl) {
     const state = sessionStorage.getItem("gh_state");
     const verifier = sessionStorage.getItem("gh_verifier");
     if (!state || !verifier || state !== stateFromUrl) {
       throw new Error("State/verifier tidak cocok. Ulangi login.");
     }
 
-    // Opsi A: langsung ke GitHub (butuh CORS diizinkan)
-    const payload = {
-      client_id: CLIENT_ID,
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: REDIRECT_URI,
-      code_verifier: verifier
-    };
+-   // Opsi A: langsung ke GitHub (butuh CORS diizinkan)
+-   const payload = { client_id: CLIENT_ID, grant_type:"authorization_code", code, redirect_uri: REDIRECT_URI, code_verifier: verifier };
+-   async function tryDirect() { ... }
+-   async function viaProxy() { ... }
+-   try { return await tryDirect(); } catch(e) { return await viaProxy(); }
 
-    async function tryDirect() {
-      const res = await fetch("https://github.com/login/oauth/access_token", {
-        method: "POST",
-        headers: { "Accept":"application/json", "Content-Type":"application/json" },
-        body: JSON.stringify(payload)
-      });
-      if (!res.ok) throw new Error("Token endpoint error: "+res.status);
-      return await res.json();
-    }
-
-    async function viaProxy() {
-      if (!TOKEN_PROXY) throw new Error("CORS diblokir & TOKEN_PROXY kosong. Aktifkan proxy fallback.");
-      const res = await fetch(TOKEN_PROXY, {
-        method: "POST",
-        headers: { "Content-Type":"application/json" },
-        body: JSON.stringify(payload)
-      });
-      if (!res.ok) throw new Error("Proxy error: "+res.status);
-      return await res.json();
-    }
-
-    try {
-      return await tryDirect();
-    } catch(err) {
-      console.warn("Direct token exchange gagal, coba via proxy:", err);
-      return await viaProxy();
-    }
++   // Selalu via proxy (secret ditambahkan di Worker)
++   const payload = { code, redirect_uri: REDIRECT_URI, code_verifier: verifier };
++   const res = await fetch(TOKEN_PROXY, {
++     method: "POST",
++     headers: { "Content-Type": "application/json" },
++     body: JSON.stringify(payload)
++   });
++   if (!res.ok) throw new Error("Proxy error: " + res.status);
++   return await res.json();
   }
+
+    
 
   function storeToken(token){
     // Simpan di sessionStorage (lebih aman daripada localStorage)
